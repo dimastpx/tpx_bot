@@ -19,13 +19,12 @@ def send_message(chat_id, text, reply_markup=None):
     return response.json()
 
 
-def send_photo(chat_id, photo_path):
+def send_photo_with_keyboard(chat_id, photo_path, reply_markup):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
     files = {"document": open(photo_path, "rb")}
-    data = {"chat_id": chat_id}
+    data = {"chat_id": chat_id, "reply_markup": reply_markup}
     response = requests.post(url, data=data, files=files)
     return response.json()
-
 
 def get_file_info(file_id):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile"
@@ -61,20 +60,20 @@ def process_image(file_id, chat_id, caption):
         draw_text(image, caption_text)
 
     # Создаем временное файловое имя для PNG изображения
+    # Создаем временное файловое имя для PNG изображения
     temp_filename = "temp_image.png"
 
     # Сохраняем PNG изображение
     image.save(temp_filename, "PNG")
 
-    # Отправляем конвертированное изображение пользователю
-    send_photo(chat_id, temp_filename)
-
-    # Обновляем кнопки
+    # Обновляем клавиатуру
     reply_markup = {
         "keyboard": [["Помощь"]],
         "resize_keyboard": True
     }
-    send_message(chat_id, "Кнопки обновлены.", json.dumps(reply_markup))
+
+    # Отправляем изображение с обновленной клавиатурой
+    send_photo_with_keyboard(chat_id, temp_filename, json.dumps(reply_markup))
 
     # Удаляем временный файл
     os.remove(temp_filename)
@@ -106,11 +105,17 @@ def draw_text_with_color(image, text, color_or_text, chat_id):
     x = (image.width - text_size[0]) // 2
     y = (image.height - text_size[1]) // 2
 
-    if color_or_text in COLORS:
-        fill_color = COLORS[color_or_text]
-    else:
-        send_message(chat_id, "Цвет неизвестен. Текст будет написан белым цветом.")
-        fill_color = (255, 255, 255, 255)
+    fill_color = (255, 255, 255, 255)  # Белый цвет по умолчанию
+
+    # Проверяем, если введен шестнадцатеричный код
+    if re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', color_or_text):
+        hex_color = color_or_text.lstrip('#')
+        if len(hex_color) == 3:
+            hex_color = ''.join([c * 2 for c in hex_color])
+        fill_color = tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+    elif color_or_text.lower() in COLORS:
+        fill_color = COLORS[color_or_text.lower()]
 
     draw.text((x, y), text, font=font, fill=fill_color)
 
@@ -147,7 +152,7 @@ def main():
                                      json.dumps(reply_markup))
                     elif text == "помощь":
                         help_message = "Этот бот для конвертации изображений в PNG размером 512x512 пикселей. Просто отправьте изображение, и бот его обработать. Для указания цвета текста используйте комментарий вида: Текст (цвет), где цвет может быть названием (например, 'red', 'black') или шестнадцатеричным кодом (например, '#FF0000'). Максимальная длина комментария 15 символов."
-                        send_message(chat_id, help_message, reply_markup=json.dumps({"remove_keyboard": True}))
+                        send_message(chat_id, help_message, json.dumps({"keyboard": [["Помощь"]], "resize_keyboard": True}))
 
                 if "photo" in update["message"]:
                     file_id = update["message"]["photo"][-1]["file_id"]
